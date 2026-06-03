@@ -1,0 +1,426 @@
+// Prisma Schema for DesignMind AI
+// Database: MySQL via XAMPP
+// ORM: Prisma v5
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== USERS & AUTH ====================
+
+model User {
+  id            Int       @id @default(autoincrement())
+  email         String    @unique @db.VarChar(255)
+  password      String?   @db.VarChar(255)
+  firstName     String    @db.VarChar(100)
+  lastName      String    @db.VarChar(100)
+  role          Role      @default(DESIGNER)
+  avatar        String?   @db.VarChar(500)
+  provider      AuthProvider @default(LOCAL)
+  providerId    String?   @db.VarChar(255)
+  isVerified    Boolean   @default(false)
+  isActive      Boolean   @default(true)
+  refreshToken  String?   @db.Text
+  resetToken    String?   @db.VarChar(255)
+  resetExpires  DateTime?
+  lastLogin     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  profile       Profile?
+  projects      Project[]
+  designs       Design[]
+  aiRequests    AIRequest[]
+  subscription  Subscription?
+  payments      Payment[]
+  ownedTeams    Team[]        @relation("TeamOwner")
+  teamMembers   TeamMember[]
+  comments      Comment[]
+  notifications Notification[]
+  activityLogs  ActivityLog[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model Profile {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @unique
+  bio         String?  @db.Text
+  company     String?  @db.VarChar(255)
+  website     String?  @db.VarChar(500)
+  phone       String?  @db.VarChar(20)
+  location    String?  @db.VarChar(255)
+  industry    String?  @db.VarChar(100)
+  socialLinks Json?
+  preferences Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ==================== PROJECTS & DESIGNS ====================
+
+model Project {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  teamId      Int?
+  name        String    @db.VarChar(255)
+  description String?   @db.Text
+  category    String?   @db.VarChar(100)
+  status      ProjectStatus @default(ACTIVE)
+  thumbnail   String?   @db.VarChar(500)
+  settings    Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team        Team?     @relation(fields: [teamId], references: [id])
+  designs     Design[]
+  comments    Comment[]
+
+  @@index([userId])
+  @@index([teamId])
+}
+
+model Design {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  projectId   Int?
+  title       String    @db.VarChar(255)
+  type        DesignType
+  content     Json?
+  imageUrl    String?   @db.VarChar(500)
+  thumbnailUrl String?  @db.VarChar(500)
+  metadata    Json?
+  version     Int       @default(1)
+  isPublic    Boolean   @default(false)
+  status      DesignStatus @default(DRAFT)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project     Project?  @relation(fields: [projectId], references: [id])
+  comments    Comment[]
+  images      Image[]
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([type])
+}
+
+model Template {
+  id          Int       @id @default(autoincrement())
+  name        String    @db.VarChar(255)
+  description String?   @db.Text
+  category    String    @db.VarChar(100)
+  type        DesignType
+  content     Json?
+  imageUrl    String?   @db.VarChar(500)
+  thumbnailUrl String?  @db.VarChar(500)
+  isPremium   Boolean   @default(false)
+  isFeatured  Boolean   @default(false)
+  tags        Json?
+  usageCount  Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([category])
+  @@index([type])
+}
+
+model Image {
+  id          Int       @id @default(autoincrement())
+  designId    Int?
+  url         String    @db.VarChar(500)
+  publicId    String?   @db.VarChar(255)
+  fileName    String    @db.VarChar(255)
+  fileSize    Int?
+  mimeType    String?   @db.VarChar(50)
+  width       Int?
+  height      Int?
+  createdAt   DateTime  @default(now())
+
+  design      Design?   @relation(fields: [designId], references: [id])
+
+  @@index([designId])
+}
+
+// ==================== BRAND ====================
+
+model BrandIdentity {
+  id              Int      @id @default(autoincrement())
+  userId          Int
+  brandName       String   @db.VarChar(255)
+  industry        String?  @db.VarChar(100)
+  logoIdeas       Json?
+  colorPalette    Json?
+  typography      Json?
+  brandVoice      String?  @db.Text
+  missionStatement String? @db.Text
+  visionStatement String?  @db.Text
+  brandGuidelines Json?
+  brandPersonality Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// ==================== AI ====================
+
+model AIRequest {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  type        AIRequestType
+  input       Json
+  output      Json?
+  status      RequestStatus @default(PENDING)
+  tokensUsed  Int?
+  processingMs Int?
+  errorMessage String?  @db.Text
+  createdAt   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// ==================== BILLING ====================
+
+model Subscription {
+  id          Int       @id @default(autoincrement())
+  userId      Int       @unique
+  plan        PlanType  @default(FREE)
+  status      SubStatus @default(ACTIVE)
+  aiCredits   Int       @default(50)
+  maxProjects Int       @default(5)
+  startDate   DateTime  @default(now())
+  endDate     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Payment {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  amount      Decimal   @db.Decimal(10, 2)
+  currency    String    @default("USD") @db.VarChar(3)
+  status      PaymentStatus @default(PENDING)
+  method      String?   @db.VarChar(50)
+  transactionId String? @db.VarChar(255)
+  description String?   @db.Text
+  createdAt   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ==================== TEAMS ====================
+
+model Team {
+  id          Int       @id @default(autoincrement())
+  name        String    @db.VarChar(255)
+  description String?   @db.Text
+  ownerId     Int
+  avatar      String?   @db.VarChar(500)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  owner       User         @relation("TeamOwner", fields: [ownerId], references: [id])
+  members     TeamMember[]
+  projects    Project[]
+
+  @@index([ownerId])
+}
+
+model TeamMember {
+  id        Int       @id @default(autoincrement())
+  teamId    Int
+  userId    Int
+  role      TeamRole  @default(MEMBER)
+  joinedAt  DateTime  @default(now())
+
+  team      Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+}
+
+// ==================== COLLABORATION ====================
+
+model Comment {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  projectId   Int?
+  designId    Int?
+  content     String    @db.Text
+  parentId    Int?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project     Project?  @relation(fields: [projectId], references: [id])
+  design      Design?   @relation(fields: [designId], references: [id])
+
+  @@index([projectId])
+  @@index([designId])
+}
+
+model Notification {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  type        String    @db.VarChar(50)
+  title       String    @db.VarChar(255)
+  message     String    @db.Text
+  isRead      Boolean   @default(false)
+  metadata    Json?
+  createdAt   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+}
+
+// ==================== ANALYTICS ====================
+
+model Analytics {
+  id          Int       @id @default(autoincrement())
+  event       String    @db.VarChar(100)
+  userId      Int?
+  metadata    Json?
+  createdAt   DateTime  @default(now())
+
+  @@index([event])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model ActivityLog {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  action      String    @db.VarChar(100)
+  entity      String?   @db.VarChar(100)
+  entityId    Int?
+  details     Json?
+  ipAddress   String?   @db.VarChar(45)
+  userAgent   String?   @db.VarChar(500)
+  createdAt   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// ==================== ENUMS ====================
+
+enum Role {
+  ADMIN
+  DESIGNER
+  FREELANCER
+  AGENCY_OWNER
+  MARKETING_TEAM
+  CONTENT_CREATOR
+}
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+  GITHUB
+}
+
+enum ProjectStatus {
+  ACTIVE
+  ARCHIVED
+  DELETED
+}
+
+enum DesignType {
+  LOGO
+  POSTER
+  BANNER
+  SOCIAL_MEDIA
+  THUMBNAIL
+  AD_CREATIVE
+  BRAND_IDENTITY
+  MOCKUP
+  INFOGRAPHIC
+  PRESENTATION
+  OTHER
+}
+
+enum DesignStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+  ARCHIVED
+}
+
+enum AIRequestType {
+  DESIGN_GENERATION
+  LOGO_GENERATION
+  COLOR_PALETTE
+  TYPOGRAPHY
+  BRAND_IDENTITY
+  SOCIAL_MEDIA
+  THUMBNAIL
+  POSTER
+  BANNER
+  AD_CREATIVE
+  COPYWRITING
+  DESIGN_ANALYSIS
+  BACKGROUND_REMOVAL
+  IMAGE_UPSCALE
+  MOCKUP
+  MOODBOARD
+  OTHER
+}
+
+enum RequestStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum PlanType {
+  FREE
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+enum SubStatus {
+  ACTIVE
+  CANCELLED
+  EXPIRED
+  PAST_DUE
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum TeamRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
